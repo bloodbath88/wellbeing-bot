@@ -1,0 +1,12 @@
+# docker-compose.yml — запуск одной командой: docker-compose up
+version: '3.8'
+
+services:
+  wellbeing-bot:
+    build: .
+    container_name: wellbeing-bot-hackathon
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - ./database.db:/app/database.db
