@@ -3,7 +3,6 @@ import asyncio
 import os
 from dotenv import load_dotenv
 from aiogram import Bot
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
@@ -20,10 +19,10 @@ async def main():
         token=BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
-    
+
     print("Я проектирую своё благополучие — бот запущен и готов к работе!")
     print("Открой Telegram → найди своего бота → нажми /start")
-    
+
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

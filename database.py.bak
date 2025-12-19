@@ -1,52 +1,65 @@
-# database.py — устойчивая версия с контекстным менеджером
+# database.py
 import sqlite3
 from datetime import datetime
 from typing import List
 
 DB_PATH = "database.db"
 
-def _connect():
-    return sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
+def get_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 # === Пользователи ===
 def add_user(user_id: int, first_name: str, username: str = None):
-    with _connect() as conn:
-        conn.row_factory = sqlite3.Row
+    conn = get_conn()
+    try:
         conn.execute(
             "INSERT OR IGNORE INTO users (id, username, first_name) VALUES (?, ?, ?)",
             (user_id, username, first_name)
         )
         conn.commit()
+    finally:
+        conn.close()
 
 def get_user(user_id: int):
-    with _connect() as conn:
-        conn.row_factory = sqlite3.Row
+    conn = get_conn()
+    try:
         cur = conn.cursor()
         cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         return cur.fetchone()
+    finally:
+        conn.close()
 
 # === Настроение ===
 def has_mood_today(user_id: int) -> bool:
     today = datetime.now().strftime("%Y-%m-%d")
-    with _connect() as conn:
+    conn = get_conn()
+    try:
         cur = conn.cursor()
         cur.execute("SELECT 1 FROM moods WHERE user_id = ? AND date = ?", (user_id, today))
         return cur.fetchone() is not None
+    finally:
+        conn.close()
 
 def save_mood(user_id: int, mood: str, note: str = ""):
     today = datetime.now().strftime("%Y-%m-%d")
-    with _connect() as conn:
+    conn = get_conn()
+    try:
         conn.execute(
             "INSERT OR REPLACE INTO moods (user_id, date, mood, note) VALUES (?, ?, ?, ?)",
             (user_id, today, mood, note)
         )
+        add_points(user_id, 10)
         conn.commit()
-    add_points(user_id, 10)
+    finally:
+        conn.close()
 
 # === Трекеры (вода, сон) ===
 def update_daily_trackers(user_id: int, water_liters: float = None, sleep_hours: int = None):
     today = datetime.now().strftime("%Y-%m-%d")
-    with _connect() as conn:
+    conn = get_conn()
+    try:
         conn.execute(
             """INSERT INTO trackers (user_id, date, water, sleep)
                VALUES (?, ?, ?, ?)
@@ -56,76 +69,109 @@ def update_daily_trackers(user_id: int, water_liters: float = None, sleep_hours:
             (user_id, today, water_liters, sleep_hours)
         )
         conn.commit()
+    finally:
+        conn.close()
 
 def get_today_trackers(user_id: int) -> sqlite3.Row:
     today = datetime.now().strftime("%Y-%m-%d")
-    with _connect() as conn:
-        conn.row_factory = sqlite3.Row
+    conn = get_conn()
+    try:
         cur = conn.cursor()
         cur.execute("SELECT water, sleep FROM trackers WHERE user_id = ? AND date = ?", (user_id, today))
         return cur.fetchone()
+    finally:
+        conn.close()
 
 # === Челленджи ===
 def set_daily_challenge(user_id: int, text: str):
-    with _connect() as conn:
+    conn = get_conn()
+    try:
         conn.execute("DELETE FROM challenges WHERE user_id = ? AND completed = 0", (user_id,))
         conn.execute(
             "INSERT INTO challenges (user_id, challenge_name, start_date) VALUES (?, ?, date('now'))",
             (user_id, text)
         )
         conn.commit()
+    finally:
+        conn.close()
 
 def get_today_challenge(user_id: int):
-    with _connect() as conn:
-        conn.row_factory = sqlite3.Row
+    conn = get_conn()
+    try:
         cur = conn.cursor()
-        cur.execute("SELECT challenge_name FROM challenges WHERE user_id = ? AND completed = 0", (user_id,))
+        cur.execute(
+            "SELECT challenge_name FROM challenges WHERE user_id = ? AND completed = 0",
+            (user_id,)
+        )
         row = cur.fetchone()
         return row["challenge_name"] if row else None
+    finally:
+        conn.close()
 
 def complete_today_challenge(user_id: int):
-    with _connect() as conn:
+    conn = get_conn()
+    try:
         conn.execute("UPDATE challenges SET completed = 1 WHERE user_id = ? AND completed = 0", (user_id,))
+        add_points(user_id, 50)
         conn.commit()
-    add_points(user_id, 50)
+    finally:
+        conn.close()
 
 # === Очки и ачивки ===
 def add_points(user_id: int, points: int):
-    with _connect() as conn:
+    conn = get_conn()
+    try:
         conn.execute(
             """INSERT INTO user_points (user_id, points) VALUES (?, ?)
                ON CONFLICT(user_id) DO UPDATE SET points = points + ?""",
             (user_id, points, points)
         )
         conn.commit()
+    finally:
+        conn.close()
     check_achievements(user_id)
 
 def get_points(user_id: int) -> int:
-    with _connect() as conn:
-        conn.row_factory = sqlite3.Row
+    conn = get_conn()
+    try:
         cur = conn.cursor()
         cur.execute("SELECT points FROM user_points WHERE user_id = ?", (user_id,))
         row = cur.fetchone()
         return row["points"] if row else 0
+    finally:
+        conn.close()
 
 def unlock_achievement(user_id: int, title: str, desc: str = "", emoji: str = "🏆"):
-    with _connect() as conn:
+    conn = get_conn()
+    try:
         conn.execute(
             """INSERT OR IGNORE INTO achievements (user_id, title, description, emoji)
                VALUES (?, ?, ?, ?)""",
             (user_id, title, desc, emoji)
         )
         conn.commit()
+    finally:
+        conn.close()
 
 def _count_rows(query: str, params: tuple) -> int:
-    with _connect() as conn:
+    conn = get_conn()
+    try:
         cur = conn.execute(query, params)
-        return len(cur.fetchall())
+        rows = cur.fetchall()
+        return len(rows)
+    finally:
+        conn.close()
 
 def _has_achievement(user_id: int, title: str) -> bool:
-    with _connect() as conn:
-        cur = conn.execute("SELECT 1 FROM achievements WHERE user_id = ? AND title = ?", (user_id, title))
+    conn = get_conn()
+    try:
+        cur = conn.execute(
+            "SELECT 1 FROM achievements WHERE user_id = ? AND title = ?",
+            (user_id, title)
+        )
         return cur.fetchone() is not None
+    finally:
+        conn.close()
 
 def check_achievements(user_id: int):
     points = get_points(user_id)
@@ -146,8 +192,10 @@ def check_achievements(user_id: int):
         unlock_achievement(user_id, "Сон — сила", "10 раз записал сон", "😴")
 
 def get_achievements(user_id: int) -> List[sqlite3.Row]:
-    with _connect() as conn:
-        conn.row_factory = sqlite3.Row
+    conn = get_conn()
+    try:
         cur = conn.cursor()
         cur.execute("SELECT title, description, emoji FROM achievements WHERE user_id = ?", (user_id,))
         return cur.fetchall()
+    finally:
+        conn.close()

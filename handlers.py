@@ -1,6 +1,7 @@
 # handlers.py — ФИНАЛЬНАЯ ВЕРСИЯ ДЛЯ Python 3.13 + aiogram 3.13.1
+import asyncio
 from aiogram import Router, F, Dispatcher
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -8,7 +9,8 @@ from aiogram.fsm.state import StatesGroup, State
 from keyboards import *
 from database import (
     add_user, update_daily_trackers, get_today_trackers,
-    save_mood, has_mood_today, get_points, unlock_achievement, get_achievements
+    save_mood, has_mood_today, get_points, unlock_achievement,
+    get_achievements, add_points
 )
 
 dp = Dispatcher()
@@ -34,7 +36,7 @@ async def back_to_main(call: CallbackQuery):
     await call.message.edit_text("Главное меню — выбирай блок:", reply_markup=main_menu)
     await call.answer()
 
-# БЛОК ТЕЛО
+# === БЛОК ТЕЛО ===
 @router.callback_query(F.data == "block_body")
 async def body_menu_handler(call: CallbackQuery):
     await call.message.edit_text(
@@ -72,8 +74,15 @@ async def save_water(message: Message, state: FSMContext):
     try:
         value = float(message.text.replace(",", "."))
         update_daily_trackers(message.from_user.id, water_liters=value)
-        await message.answer("Записал воду! Молодец", reply_markup=body_menu)
+        add_points(message.from_user.id, 5)
         unlock_achievement(message.from_user.id, "Гидратация +1", "Записал воду", "Droplet")
+        stats = get_today_trackers(message.from_user.id)
+        water = stats["water"] if stats else value
+        sleep = stats["sleep"] if stats else 0
+        await message.answer(
+            f"Записал воду! Молодец 💧\n\nСегодня:\nВода: {water} л\nСон: {sleep} ч",
+            reply_markup=body_menu
+        )
     except:
         await message.answer("Напиши число, например 1.5")
     await state.clear()
@@ -81,11 +90,19 @@ async def save_water(message: Message, state: FSMContext):
 @router.message(Form.sleep)
 async def save_sleep(message: Message, state: FSMContext):
     try:
-        value = int(message.text)
-        update_daily_trackers(message.from_user.id, sleep_hours=value)
-        await message.answer(f"Сон {value} ч — отлично отдыхаем!", reply_markup=body_menu)
+        value = float(message.text.replace(",", "."))
+        hours = int(value)
+        update_daily_trackers(message.from_user.id, sleep_hours=hours)
+        add_points(message.from_user.id, 5)
+        stats = get_today_trackers(message.from_user.id)
+        water = stats["water"] if stats else 0
+        sleep = stats["sleep"] if stats else hours
+        await message.answer(
+            f"Сон {hours} ч — отлично отдыхаем! 😴\n\nСегодня:\nВода: {water} л\nСон: {sleep} ч",
+            reply_markup=body_menu
+        )
     except:
-        await message.answer("Напиши целое число")
+        await message.answer("Напиши целое число (например: 8)")
     await state.clear()
 
 @router.callback_query(F.data == "knowledge")
@@ -95,7 +112,7 @@ async def knowledge(call: CallbackQuery):
     ])
     await call.message.edit_text(
         "Полезный перекус для мозга:\n\n"
-        "Грецкие орехи + тёмный шоколад + ягоды = суперсила для учёбы",
+        "Грецкие орехи + тёмный шоколад + ягоды = суперсила для учёбы 🍫🥜🫐",
         reply_markup=kb
     )
     await call.answer()
@@ -108,12 +125,12 @@ async def challenges(call: CallbackQuery):
     await call.message.edit_text(
         "Челлендж на сегодня:\n\n"
         "Сделай 5-минутную зарядку прямо сейчас!\n\n"
-        "Выполнил? → Нажми «Готово» в статистике",
+        "Выполнил? → Отметь в трекере и получи очки 💪",
         reply_markup=kb
     )
     await call.answer()
 
-# БЛОК ДУША
+# === БЛОК ДУША ===
 @router.callback_query(F.data == "block_soul")
 async def soul_menu_handler(call: CallbackQuery):
     await call.message.edit_text(
@@ -130,7 +147,7 @@ async def sos(call: CallbackQuery):
         "Вдохни на 4 секунды\n"
         "Задержи дыхание на 7 секунд\n"
         "Медленно выдохни на 8 секунд\n\n"
-        "Повтори 4 раза — станет легче",
+        "Повтори 4 раза — станет легче 💙",
         reply_markup=back_to_soul_kb
     )
     await call.answer()
@@ -143,9 +160,9 @@ async def navigator_handler(call: CallbackQuery):
 @router.callback_query(F.data.startswith("nav_"))
 async def navigator_problems(call: CallbackQuery):
     texts = {
-        "nav_bullying": "При буллинге:\n• Поговори с доверенным взрослым\n• Запиши факты\n• Ты не один — мы рядом",
+        "nav_bullying": "При буллинге:\n• Поговори с доверенным взрослым\n• Запиши факты\n• Ты не один — поддержка рядом",
         "nav_parents": "Конфликты с родителями:\n• Выбери спокойный момент\n• Говори от «я»: «Мне тяжело, когда...»\n• Предложи решение вместе",
-        "nav_exam": "Стресс перед экзаменами:\n• Делай перерывы каждые 25 мин\n• Дыши 4-7-8\n• Ты уже готов больше, чем думаешь"
+        "nav_exam": "Стресс перед экзаменами:\n• Делай перерывы каждые 25 мин\n• Дыши 4-7-8\n• Ты готов больше, чем думаешь"
     }
     await call.message.edit_text(texts.get(call.data, "Нет совета"), reply_markup=back_to_soul_kb)
     await call.answer()
@@ -153,7 +170,7 @@ async def navigator_problems(call: CallbackQuery):
 @router.callback_query(F.data == "mood_diary")
 async def mood_diary(call: CallbackQuery):
     if has_mood_today(call.from_user.id):
-        await call.message.edit_text("Ты уже отметил настроение сегодня! Завтра новый день", reply_markup=back_to_soul_kb)
+        await call.message.edit_text("Ты уже отметил настроение сегодня! Завтра новый день 🌅", reply_markup=back_to_soul_kb)
     else:
         await call.message.edit_text("Как твоё настроение сегодня?", reply_markup=mood_keyboard)
     await call.answer()
@@ -166,10 +183,10 @@ async def save_mood_cb(call: CallbackQuery):
     }
     mood = mood_map.get(call.data, "Неизвестно")
     save_mood(call.from_user.id, mood)
-    await call.message.edit_text(f"Записал: {mood}\nСпасибо, что поделился со мной", reply_markup=back_to_soul_kb)
+    await call.message.edit_text(f"Записал: {mood}\nСпасибо, что поделился со мной 💛", reply_markup=back_to_soul_kb)
     await call.answer()
 
-# БЛОК РАЗВИТИЕ
+# === БЛОК РАЗВИТИЕ ===
 @router.callback_query(F.data == "block_dev")
 async def dev_menu_handler(call: CallbackQuery):
     await call.message.edit_text(
@@ -183,12 +200,25 @@ async def dev_menu_handler(call: CallbackQuery):
 async def pomodoro(call: CallbackQuery):
     await call.message.edit_text(
         "Pomodoro запущен!\n\n"
-        "25 минут сосредоточенной работы\n"
+        "25 минут сосредоточенной работы ⏳\n"
         "Потом 5 минут отдыха\n"
         "Я напомню, когда перерыв!",
         reply_markup=back_to_main_kb
     )
     await call.answer()
+    # 25 минут работы
+    await asyncio.sleep(25 * 60)
+    try:
+        await call.message.answer("Время перерыва! Отдохни 5 минут 🕔")
+    except Exception:
+        # Сообщение могло быть удалено/изменено — просто игнорируем
+        pass
+    # 5 минут отдыха
+    await asyncio.sleep(5 * 60)
+    try:
+        await call.message.answer("Цикл завершён! Готов повторить? 🔁")
+    except Exception:
+        pass
 
 @router.callback_query(F.data == "prof_test")
 async def prof_test(call: CallbackQuery):
@@ -200,6 +230,22 @@ async def prof_test(call: CallbackQuery):
         "А) Работать с людьми → ты эмпат\n"
         "Б) Работать с техникой → ты аналитик\n"
         "В) Творить → ты креатор",
+        reply_markup=kb
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "soft_skills")
+async def soft_skills(call: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Назад", callback_data="block_dev")]
+    ])
+    await call.message.edit_text(
+        "Софт-скиллы (коммуникация, эмпатия, сотрудничество)\n\n"
+        "Совет на сегодня:\n"
+        "1) Слушай активно: перефразируй услышанное.\n"
+        "2) Задавай уточняющие вопросы.\n"
+        "3) Благодари за откровенность.\n\n"
+        "Попробуй применить это сегодня!",
         reply_markup=kb
     )
     await call.answer()

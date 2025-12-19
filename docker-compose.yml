@@ -1,4 +1,4 @@
-# docker-compose.yml — запуск одной командой: docker-compose up
+## docker-compose.yml — запуск одной командой: docker-compose up
 version: '3.8'
 
 services:

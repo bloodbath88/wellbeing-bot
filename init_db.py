@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS trackers (
     date       TEXT NOT NULL,           -- формат YYYY-MM-DD
     water      REAL  DEFAULT 0,         -- литры воды
     sleep      INTEGER DEFAULT 0,       -- часы сна
-    steps      INTEGER DEFAULT 0,       -- шаги (если захотим добавить позже)
+    steps      INTEGER DEFAULT 0,       -- шаги (резерв)
     FOREIGN KEY(user_id) REFERENCES users(id),
     UNIQUE(user_id, date)
 )
@@ -67,16 +67,17 @@ CREATE TABLE IF NOT EXISTS challenges (
 )
 ''')
 
-# ===================== ДОПОЛНИТЕЛЬНО: очки и ачивки (для вау-фактора) =====================
+# ===================== ДОПОЛНИТЕЛЬНО: очки и ачивки =====================
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS achievements (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL,
     title       TEXT NOT NULL,           -- например: "Гидратация мастер"
     description TEXT,
-    emoji       TEXT DEFAULT "Trophy",
+    emoji       TEXT DEFAULT "🏆",
     unlocked_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    UNIQUE(user_id, title)
 )
 ''')
 
@@ -89,7 +90,6 @@ CREATE TABLE IF NOT EXISTS user_points (
 )
 ''')
 
-# Сохраняем изменения и закрываем соединение
 conn.commit()
 conn.close()
 
